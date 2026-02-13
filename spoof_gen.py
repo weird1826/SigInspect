@@ -1,6 +1,8 @@
 import os
+import random
+import struct
 
-# 1. Define the Signatures (Magic Numbers)
+# 1. Define the Signatures (Magic Numbers) - Expanded to match C tool
 signatures = {
     "ZIP":  b'\x50\x4B\x03\x04',
     "PDF":  b'\x25\x50\x44\x46',
@@ -11,23 +13,50 @@ signatures = {
     "ELF":  b'\x7F\x45\x4C\x46',
     "JAVA": b'\xCA\xFE\xBA\xBE',
     "MP3":  b'\x49\x44\x33',
-    "BMP":  b'\x42\x4D'
+    "BMP":  b'\x42\x4D',
+    "RAR":  b'\x52\x61\x72\x21\x1A\x07',
+    "7Z":   b'\x37\x7A\xBC\xAF\x27\x1C',
+    "GZIP": b'\x1F\x8B',
+    "FLAC": b'\x66\x4C\x61\x43',
+    "MIDI": b'\x4D\x54\x68\x64',
+    "TIFF_LE": b'\x49\x49\x2A\x00',
+    "TIFF_BE": b'\x4D\x4D\x00\x2A',
+    "RTF":  b'\x7B\x5C\x72\x74\x66\x31'
 }
 
 # 2. Define Mismatched Extensions for Testing
-# format: (Real Type, Fake Extension to apply)
+# format: (Real Type, Fake Extension to apply, Entropy Strategy)
+# Entropy Strategy: 'low', 'medium', 'high'
 test_cases = [
-    ("ZIP", "txt"),   # Real ZIP, looks like .txt
-    ("PDF", "jpg"),   # Real PDF, looks like .jpg
-    ("GIF", "pdf"),   # Real GIF, looks like .pdf
-    ("PNG", "docx"),  # Real PNG, looks like .docx
-    ("EXE", "png"),   # Real EXE, looks like .png (Common malware technique)
-    ("JPEG", "gif"),  # Real JPEG, looks like .gif
-    ("ELF", "txt"),   # Real ELF, looks like .txt
-    ("JAVA", "class.txt"), # Real Java Class, looks like .txt
-    ("MP3", "wav"),   # Real MP3, looks like .wav
-    ("BMP", "jpg")    # Real BMP, looks like .jpg
+    ("ZIP", "txt", "high"),
+    ("PDF", "jpg", "medium"),
+    ("GIF", "pdf", "medium"),
+    ("PNG", "docx", "high"),
+    ("EXE", "png", "high"),
+    ("JPEG", "gif", "high"),
+    ("ELF", "txt", "high"),
+    ("JAVA", "class.txt", "medium"),
+    ("MP3", "wav", "high"),
+    ("BMP", "jpg", "low"),
+    ("RAR", "iso", "high"),
+    ("7Z", "zip", "high"),
+    ("RTF", "txt", "low")
 ]
+
+def generate_content(strategy, size=16384):
+    """Generates content with varying entropy levels."""
+    if strategy == "low":
+        # Repeating pattern - very low entropy
+        pattern = b"A" * 10 + b"B" * 10
+        return (pattern * (size // len(pattern) + 1))[:size]
+    elif strategy == "medium":
+        # Text-like content - medium entropy
+        chars = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 \n"
+        return bytes(random.choice(chars) for _ in range(size))
+    elif strategy == "high":
+        # Random bytes - high entropy
+        return os.urandom(size)
+    return b'\x00' * size
 
 def generate_test_files():
     output_dir = "test_files"
@@ -37,9 +66,11 @@ def generate_test_files():
         os.makedirs(output_dir)
         print(f"[+] Created directory: {output_dir}")
 
-    print(f"[+] Generating {len(test_cases)} false-type files...\n")
+    print(f"[+] Generating {len(test_cases)} false-type files with entropy variations...\n")
+    print(f"{'Filename':<35} | {'Real Header':<12} | {'Fake Ext':<10} | {'Entropy':<8}")
+    print("-" * 75)
 
-    for real_type, fake_ext in test_cases:
+    for real_type, fake_ext, entropy_strat in test_cases:
         # Construct the filename: realtype_disguised_as.fake_ext
         filename = f"real_{real_type}_spoofed.{fake_ext}"
         filepath = os.path.join(output_dir, filename)
@@ -52,13 +83,11 @@ def generate_test_files():
                 # Write the magic bytes at the very start of the file
                 f.write(magic_bytes)
                 
-                # Add some padding/dummy data so the file isn't empty
-                f.write(b'\x00' * 20) 
-                
-                # Add a text string to confirm readable content if opened in hex editor
-                f.write(f" This is actually a {real_type} file.".encode('utf-8'))
+                # Generate payload (16KB to ensure windowed entropy works)
+                payload = generate_content(entropy_strat, size=16384)
+                f.write(payload)
             
-            print(f"    Created: {filename:<30} | Header: {real_type} | Ext: .{fake_ext}")
+            print(f"{filename:<35} | {real_type:<12} | .{fake_ext:<9} | {entropy_strat}")
         else:
             print(f"    [!] Error: Signature for {real_type} not found.")
 

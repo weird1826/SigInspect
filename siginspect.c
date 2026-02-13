@@ -1,5 +1,9 @@
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
+
+#define BUFFER_SIZE 4096
+#define WINDOW_SIZE 4096
 
 typedef struct
 {
@@ -61,13 +65,62 @@ FileSignature SIGNATURE_DB[] = {
 
 int DB_SIZE = sizeof(SIGNATURE_DB) / sizeof(SIGNATURE_DB[0]);
 
-const char *check_signature(FILE *f)
+double calculate_entropy(FILE *f)
 {
-    unsigned char header[64];
+    long byte_counts[256] = {0};
+    unsigned char buffer[BUFFER_SIZE];
+    size_t bytes_read;
+    long total_bytes = 0;
 
     fseek(f, 0, SEEK_SET);
 
+    while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, f)) > 0)
+    {
+        for (size_t i = 0; i < bytes_read; i++)
+        {
+            byte_counts[buffer[i]]++;
+        }
+        total_bytes += bytes_read;
+    }
+
+    if (total_bytes == 0)
+    {
+        return 0.0;
+    }
+
+    double entropy = 0.0;
+    for (int i = 0; i < 256; i++)
+    {
+        if (byte_counts[i] > 0)
+        {
+            double probability = (double)byte_counts[i] / total_bytes;
+            entropy -= probability * log2(probability);
+        }
+    }
+
+    return entropy;
+}
+
+void print_header_hex(FILE *f)
+{
+    unsigned char header[64];
+    fseek(f, 0, SEEK_SET);
+    size_t bytes_read = fread(header, 1, 16, f);
+
+    printf("\tRaw Header (Hex): ");
+    for (size_t i = 0; i < bytes_read; i++)
+    {
+        printf("%02X ", header[i]);
+    }
+    printf("\n");
+}
+
+const char *check_signature(FILE *f)
+{
+    unsigned char header[64];
+    fseek(f, 0, SEEK_SET);
     size_t bytes_read = fread(header, 1, 64, f);
+
     if (bytes_read == 0)
     {
         return "Empty or unreadable";
@@ -100,8 +153,29 @@ void open_file(const char *filepath)
 
     printf("[*] File opened successfully!");
     printf("\n[!] Analysis Results for: %s\n", filepath);
+
     const char *file_type = check_signature(f);
     printf("\tFile Type (Signature): %s\n", file_type);
+
+    print_header_hex(f);
+
+    double entropy = calculate_entropy(f);
+    printf("\tShannon Entropy: %.4f bits/byte\n", entropy);
+
+    if (entropy > 7.5)
+    {
+        printf("\t\tAnalysis: High entropy. Likely encrypted, compressed, or random data.\n");
+    }
+    else if (entropy < 2.0)
+    {
+        printf("\t\tAnalysis: Low entropy. Likely text, padding, or sparse data.\n");
+    }
+    else
+    {
+        printf("\t\tAnalysis: Moderate entropy. Likely native code or mixed data.\n");
+    }
+
+    fclose(f);
 }
 
 int main(int argc, char *argv[])
