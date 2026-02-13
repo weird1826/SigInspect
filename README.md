@@ -18,10 +18,17 @@ This tool analyzes the file signature, often referred to as magic number of a fi
 
 ### Entropy Analysis
 * Calculates Shannon Entropy:
+
 $$
-H = -\sum p(x) \log_2 p(x)
+H(X) = -\sum_{i=1}^{n} p(x_i)\log_2 p(x_i)
 $$
-* High Entropy may indicate encrypted, compressed, or random data
+
+Where:
+- $H(X)$ is the entropy of random variable $X$
+- $p(x_i)$ is the probability of outcome $x_i$
+- $\log_2$ is the base-2 logarithm
+
+**High Entropy may indicate encrypted, compressed, or random data**
 
 ## Installation
 ```bash
